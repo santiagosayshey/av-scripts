@@ -1,0 +1,42 @@
+#!/bin/bash
+
+if [ "$#" -ne 1 ]; then
+  echo "Usage: $0 /path/to/audiobook/folder"
+  exit 1
+fi
+
+audiobook_folder="$1"
+
+if [ ! -d "$audiobook_folder" ]; then
+  echo "Error: Directory not found."
+  exit 1
+fi
+
+shopt -s nocasematch
+
+for file in "$audiobook_folder"/*; do
+  filename=$(basename "$file")
+  extension="${filename##*.}"
+  base_name="${filename%.*}"
+
+  if [[ "$base_name" =~ (intro|introduction|prologue) ]]; then
+    new_name="Introduction.$extension"
+  elif [[ "$base_name" =~ (epilogue|outro|conclusion) ]]; then
+    new_name="Epilogue.$extension"
+  elif [[ "$base_name" =~ (chapter|ch)[[:space:]]*([0-9]+) ]]; then
+    chapter_number="${BASH_REMATCH[2]}"
+    new_name="Chapter $chapter_number.$extension"
+  else
+    continue
+  fi
+
+  new_title="${new_name%.*}"
+  temp_file="$audiobook_folder/temp.$extension"
+
+  ffmpeg -i "$file" -c copy -metadata title="$new_title" "$temp_file" -y >/dev/null 2>&1
+
+  mv -n "$temp_file" "$audiobook_folder/$new_name"
+  echo "Renamed \"$filename\" to \"$new_name\" and updated the 'title' tag"
+done
+
+shopt -u nocasematch
