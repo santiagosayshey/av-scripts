@@ -1,0 +1,95 @@
+#!/bin/bash
+
+# Function to check if the path is a Windows path
+is_windows_path() {
+  [[ $1 =~ ^[A-Za-z]:\\ ]]
+}
+
+# Function to convert a Windows path to a Unix path
+windows_to_unix_path() {
+  local win_path="$1"
+  echo "$win_path" | sed 's/\\/\//g' | sed -r 's/^(.):/\/mnt\/\L\1/'
+}
+
+# Function to convert a Unix path to a Windows path (for WSL)
+unix_to_windows_path() {
+  local unix_path="$1"
+  echo "$unix_path" | sed -r 's/^\/mnt\/(.)\//\1:\//' | sed 's/\//\\/g'
+}
+
+# Function to check if running on WSL
+is_wsl() {
+  [[ "$(uname -r)" =~ Microsoft$ ]]
+}
+
+# Check for input directory
+if [ -z "$1" ]; then
+    echo "Usage: $0 <input_directory>"
+    exit 1
+fi
+
+input_dir="$1"
+
+# Convert Windows path to Unix path if necessary
+if is_windows_path "$input_dir"; then
+    input_dir=$(windows_to_unix_path "$input_dir")
+fi
+
+# Check if the input directory exists
+if [ ! -d "$input_dir" ]; then
+    echo "Error: Input directory not found!"
+    exit 1
+fi
+
+temp_dir=$(mktemp -d)
+
+# Get the first m4b file in the input directory
+first_m4b=$(find "$input_dir" -iname "*.m4b" -print -quit)
+
+# Extract the audiobook album metadata
+audiobook_name=$(ffprobe -v error -show_entries format_tags=album -of default=noprint_wrappers=1:nokey=1 "$first_m4b")
+
+# Create output directory if it doesn't exist
+output_dir=$(dirname "$input_dir")
+output_folder="${output_dir}/${audiobook_name}"
+mkdir -p "${output_folder}"
+output_file="${output_folder}/${audiobook_name}.m4b"
+
+# Merge the m4b files and save as a temporary mp4 file
+find "$input_dir" -iname "*.m4b" -exec echo "file '{}'" \; | sort > "${temp_dir}/input_files.txt"
+ffmpeg -f concat -safe 0 -i "${temp_dir}/input_files.txt" -c copy "${temp_dir}/merged.mp4"
+
+# Extract the chapter information from the original files
+find "$input_dir" -iname "*.m4b" -exec mp4chaps -x '{}' \; > "${temp_dir}/chapters.txt"
+
+# Adjust the chapter timestamps
+start_time=0
+awk -v temp_dir="${temp_dir}" '
+  /^CHAPTER/ {
+    printf "%s %.2f\n", $1, start_time + $2
+  }
+  /^CHAPTEREND/ {
+    printf "%s %.2f\n", $1, start_time + $2
+    start_time += $2
+  }
+  /^CHAPTERNAME/ {
+    print
+  }
+' "${temp_dir}/chapters.txt" > "${temp_dir}/adjusted_chapters.txt"
+
+# Add the adjusted chapter information to the merged file
+mp4chaps -i "${temp_dir}/merged.mp4" -I < "${temp_dir}/adjusted_chapters.txt"
+
+# Convert the merged mp4 file to m4b
+ffmpeg -i "${temp_dir}/merged.mp4" -vn -c:a copy -movflags +faststart -f mp4 "${output_file}"
+
+# Clean up
+rm -r "${temp_dir}"
+
+# Convert the output path to Windows format if running on WSL
+if is_wsl; then
+  output_file=$(unix_to_windows_path "${output_file}")
+fi
+
+# Display the output path
+echo "Output saved in: ${output_file}"
