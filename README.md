@@ -54,7 +54,7 @@ sudo ldconfig
 
 ## Usage
 
-./audiobook_chapter_merger.sh <input_directory>
+./chaptermerge <input_directory>
 
 
 - `<input_directory>`: The directory containing the M4B audiobook chapters
@@ -65,7 +65,7 @@ The output file will be saved in a subfolder with the same name as the audiobook
 
 Assuming you have an audiobook with separate chapter files in a directory called `my_audiobook`, you can run the script as follows:
 
-./audiobook_chapter_merger.sh my_audiobook
+./chaptermerge my_audiobook
 
 The output file will be saved in a subfolder named after the audiobook within the parent directory of `my_audiobook`.
 
@@ -74,3 +74,4 @@ The output file will be saved in a subfolder named after the audiobook within th
 - The script should be run on a Unix-based system (Linux or macOS) or Windows Subsystem for Linux (WSL).
 - The script will automatically detect and convert Windows file paths to Unix file paths if needed.
 - The script will display the output path in the correct format depending on whether it's a Unix or Windows path.
+- Combine with Readarr for a seamless audobook experience!
